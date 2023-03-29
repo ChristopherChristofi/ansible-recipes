@@ -51,3 +51,47 @@
         - docker-compose-plugin
       state: latest
       update_cache: true
+
+- name: Set up a GitLab server with Docker
+  hosts: gitlab_servers
+  become: true
+  gather_facts: true
+  vars:
+    gitlab_home_dir: /srv/gitlab
+  tasks:
+    - name: Set up volumes location for Docker
+      file:
+        path: "{{ gitlab_home_dir }}"
+        state: directory
+
+    - name: Create a GitLab container
+      community.docker.docker_container:
+        hostname: gitlab-serv01
+        name: gitlab
+        image: "gitlab/gitlab-ce:latest"
+        restart_policy: "always"
+        ports:
+          - "{{ ansible_default_ipv4.address }}:443:443"
+          - "{{ ansible_default_ipv4.address }}:8080:80"
+        volumes:
+          - "{{ gitlab_home_dir }}/config:/etc/gitlab"
+          - "{{ gitlab_home_dir }}/logs:/var/log/gitlab"
+          - "{{ gitlab_home_dir }}/data:/var/opt/gitlab"
+        shm_size: "256m"
+
+    # tweak to improve env variable handling and conditions
+    - name: Edit GitLab container SSL configuration script
+      ansible.builtin.lineinfile:
+        path: "{{ gitlab_home_dir }}/config/gitlab.rb"
+        search_string: "# external_url 'GENERATED_EXTERNAL_URL'"
+        line: external_url 'https://gitlab.example.com'
+
+    # fix to wait on prior task completion
+    - name: Enable GitLab Docker Let's Encrypt integration
+      community.docker.docker_container_exec:
+        container: gitlab
+        argv:
+          - /bin/bash
+          - "-c"
+          - "gitlab-ctl reconfigure"
+        chdir: /etc/gitlab
