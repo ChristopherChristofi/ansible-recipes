@@ -79,14 +79,22 @@
           - "{{ gitlab_home_dir }}/data:/var/opt/gitlab"
         shm_size: "256m"
 
-    # tweak to improve env variable handling and conditions
+   - name: Retrieve GitLab container build status information
+      community.docker.docker_container_info:
+        name: gitlab
+      register: result
+
+    - name: Wait until GitLab container build complete and running
+      ansible.builtin.wait_for:
+      when: result.container['State']['Status'] == "running"
+
+    # tweak to improve url env variable handling and conditions
     - name: Edit GitLab container SSL configuration script
       ansible.builtin.lineinfile:
         path: "{{ gitlab_home_dir }}/config/gitlab.rb"
         search_string: "# external_url 'GENERATED_EXTERNAL_URL'"
-        line: external_url 'https://gitlab.example.com'
-
-    # fix to wait on prior task completion
+        line: external_url 'https://gitlab.example.com
+    
     - name: Enable GitLab Docker Let's Encrypt integration
       community.docker.docker_container_exec:
         container: gitlab
