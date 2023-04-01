@@ -78,28 +78,33 @@
           - "{{ gitlab_home_dir }}/logs:/var/log/gitlab"
           - "{{ gitlab_home_dir }}/data:/var/opt/gitlab"
         shm_size: "256m"
+        
+- name: Configure SSL for GitLab server
+  hosts: gitlab_servers
+  become: true
+  vars:
+    gitlab_home_dir: /srv/gitlab
+  tasks:
+  - name: Retrieve GitLab container build status information
+    community.docker.docker_container_info:
+      name: gitlab
+    register: result
 
-   - name: Retrieve GitLab container build status information
-      community.docker.docker_container_info:
-        name: gitlab
-      register: result
+  - name: Wait until GitLab container build complete and running
+    ansible.builtin.wait_for:
+    when: result.container['State']['Status'] == "running"
 
-    - name: Wait until GitLab container build complete and running
-      ansible.builtin.wait_for:
-      when: result.container['State']['Status'] == "running"
-
-    # tweak to improve url env variable handling and conditions
-    - name: Edit GitLab container SSL configuration script
-      ansible.builtin.lineinfile:
-        path: "{{ gitlab_home_dir }}/config/gitlab.rb"
-        search_string: "# external_url 'GENERATED_EXTERNAL_URL'"
-        line: external_url 'https://gitlab.example.com
-    
-    - name: Enable GitLab Docker Let's Encrypt integration
-      community.docker.docker_container_exec:
-        container: gitlab
-        argv:
-          - /bin/bash
-          - "-c"
-          - "gitlab-ctl reconfigure"
-        chdir: /etc/gitlab
+  - name: Edit GitLab container SSL configuration script
+    ansible.builtin.lineinfile:
+      path: "{{ gitlab_home_dir }}/config/gitlab.rb"
+      search_string: "# external_url 'GENERATED_EXTERNAL_URL'"
+      line: external_url 'https://gitlab.example.com'
+  
+  - name: Enable GitLab Docker Let's Encrypt integration
+    community.docker.docker_container_exec:
+      container: gitlab
+      argv:
+        - /bin/bash
+        - "-c"
+        - "gitlab-ctl reconfigure"
+      chdir: /etc/gitlab
